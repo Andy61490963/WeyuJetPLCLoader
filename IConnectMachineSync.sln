@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IConnectMachineSync", "IConnectMachineSync\IConnectMachineSync.csproj", "{78AD7663-8484-4085-9798-7DB0FEFC4871}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IConnectMachineSync.Tests", "IConnectMachineSync.Tests\IConnectMachineSync.Tests.csproj", "{DBC6539D-1029-462E-A05A-253AFE64F974}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{78AD7663-8484-4085-9798-7DB0FEFC4871}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78AD7663-8484-4085-9798-7DB0FEFC4871}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78AD7663-8484-4085-9798-7DB0FEFC4871}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78AD7663-8484-4085-9798-7DB0FEFC4871}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBC6539D-1029-462E-A05A-253AFE64F974}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBC6539D-1029-462E-A05A-253AFE64F974}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBC6539D-1029-462E-A05A-253AFE64F974}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBC6539D-1029-462E-A05A-253AFE64F974}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

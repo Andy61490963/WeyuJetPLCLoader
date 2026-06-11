@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+Logs/
+publish/
+playwright-browsers/
+outputs/machine_exports/*
+!outputs/machine_exports/.gitkeep
+.idea/
