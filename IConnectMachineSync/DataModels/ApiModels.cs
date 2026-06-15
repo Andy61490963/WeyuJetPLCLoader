@@ -34,3 +34,11 @@ public sealed record StatusChangeRequest(
     [property: JsonPropertyName("REPORT_TIME")] DateTimeOffset ReportTime,
     [property: JsonPropertyName("INPUT_FORM_NAME")] string InputFormName,
     [property: JsonPropertyName("UPDATE_EQM_MASTER")] bool UpdateEquipmentMaster);
+
+public sealed class AutoDcUploadResponse
+{
+    public bool IsSuccess { get; init; }
+    public bool? Data { get; init; }
+    public string? Code { get; init; }
+    public string? Message { get; init; }
+}

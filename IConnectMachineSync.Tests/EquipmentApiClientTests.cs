@@ -35,17 +35,67 @@ public sealed class EquipmentApiClientTests
         Assert.Equal("Bearer test-token", handler.Requests[1].Authorization);
     }
 
+    [Fact]
+    public async Task SendQuantityAsync_SendsWipQtyPayloadWithBearerToken()
+    {
+        var handler = new RecordingHandler();
+        var client = CreateClient(handler);
+
+        await client.SendQuantityAsync("JET-S1", 1020m, CancellationToken.None);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal("/api/Eqm/EqmAutoDc/AutoDcUpload", handler.Requests[1].Path);
+        Assert.Contains("EQP_NO=JET-S1", handler.Requests[1].Query);
+        Assert.Contains("VALUE=Qty%3A1020", handler.Requests[1].Query);
+        Assert.Contains("UNIT=pcs", handler.Requests[1].Query);
+        Assert.Contains("AutoIdle=FALSE", handler.Requests[1].Query);
+        Assert.Contains("SameChange=FALSE", handler.Requests[1].Query);
+        Assert.DoesNotContain("Mode=", handler.Requests[1].Query);
+        Assert.Empty(handler.Requests[1].Body);
+        Assert.Equal("Bearer test-token", handler.Requests[1].Authorization);
+    }
+
+    [Fact]
+    public async Task SendQuantityAsync_ThrowsWhenApiReturnsUnsuccessfulResult()
+    {
+        var handler = new RecordingHandler("""{"IsSuccess":false,"Data":false,"Code":"BAD_QTY","Message":"invalid quantity"}""");
+        var client = CreateClient(handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.SendQuantityAsync("JET-S1", 1020m, CancellationToken.None));
+
+        Assert.Contains("BAD_QTY", exception.Message);
+        Assert.Contains("invalid quantity", exception.Message);
+    }
+
+    private static EquipmentApiClient CreateClient(RecordingHandler handler)
+    {
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        var options = Options.Create(new AppOptions
+        {
+            Api = new ApiOptions { BaseUrl = "https://example.test/", Account = "api-user", Password = "api-password", ReasonNo = "99", RetryCount = 1 }
+        });
+        return new EquipmentApiClient(httpClient, options, NullLogger<EquipmentApiClient>.Instance);
+    }
+
     private sealed class RecordingHandler : HttpMessageHandler
     {
-        public List<(string Path, string Body, string? Authorization)> Requests { get; } = [];
+        private readonly string _apiResponse;
+
+        public RecordingHandler(string apiResponse = """{"IsSuccess":true,"Data":true,"Code":"","Message":""}""")
+        {
+            _apiResponse = apiResponse;
+        }
+
+        public List<(string Path, string Query, string Body, string? Authorization)> Requests { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
-            Requests.Add((request.RequestUri!.AbsolutePath, body, request.Headers.Authorization?.ToString()));
+            Requests.Add((request.RequestUri!.AbsolutePath, request.RequestUri.Query, body, request.Headers.Authorization?.ToString()));
             var response = request.RequestUri.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase)
                 ? """{"IsSuccess":true,"Data":{"tokenInfo":{"TOKEN_KEY":"test-token","TOKEN_EXPIRY":"2099-01-01T00:00:00Z"}}}"""
-                : "{}";
+                : _apiResponse;
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(response, Encoding.UTF8, "application/json")

@@ -22,9 +22,9 @@ public sealed class MachineDataFunctionsTests
         Assert.Null(MachineDataFunctions.ParseShotCount(""));
 
     [Theory]
-    [InlineData("Mold TOP", "TOP")]
-    [InlineData("Mold", null)]
-    [InlineData("Mold Mold Name", null)]
+    [InlineData("Mold TOP", "Mold TOP")]
+    [InlineData("Mold", "Mold")]
+    [InlineData("Mold Mold Name", "Mold Mold Name")]
     public void ParseMoldNo_ReturnsExpectedValue(string source, string? expected) =>
         Assert.Equal(expected, MachineDataFunctions.ParseMoldNo(source));
 

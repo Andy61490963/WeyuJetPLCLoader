@@ -32,9 +32,10 @@ public sealed class ApiOptions
 
 public sealed class SyncOptions
 {
-    public int IntervalSeconds { get; init; } = 60;
+    public int IntervalSeconds { get; init; } = 300;
     public string EquipmentPrefix { get; init; } = "JET-";
     public bool SendStartupFullSync { get; init; } = true;
+    public bool SendQtyAutoDc { get; init; } = true;
 }
 
 public sealed class MachineSeedOptions

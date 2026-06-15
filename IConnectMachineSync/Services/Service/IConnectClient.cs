@@ -26,6 +26,8 @@ public sealed class IConnectClient(IOptions<AppOptions> options, ILogger<IConnec
             }
             catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
             {
+                // i-Connect occasionally leaves the iframe or DataTables Ajax in a bad state.
+                // Rebuilding Chromium is slower but reliably clears stale sessions.
                 lastError = ex;
                 logger.LogWarning(ex, "i-Connect attempt {Attempt}/2 failed; rebuilding browser session.", attempt);
                 await ResetAsync();
@@ -41,7 +43,12 @@ public sealed class IConnectClient(IOptions<AppOptions> options, ILogger<IConnec
             return;
 
         if (!string.IsNullOrWhiteSpace(_options.BrowserPath))
-            Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", _options.BrowserPath);
+        {
+            var browserPath = Path.IsPathRooted(_options.BrowserPath)
+                ? _options.BrowserPath
+                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, _options.BrowserPath));
+            Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", browserPath);
+        }
         _playwright ??= await Playwright.CreateAsync();
         _browser ??= await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = _options.Headless });
         _page = await _browser.NewPageAsync(new BrowserNewPageOptions { ViewportSize = new ViewportSize { Width = 1920, Height = 950 } });
@@ -66,6 +73,8 @@ public sealed class IConnectClient(IOptions<AppOptions> options, ILogger<IConnec
         await menu.ClickAsync("#id_div_1");
         await menu.ClickAsync("#id_l_radio1_1");
 
+        // The list button can look selected before DataTables finishes its Ajax load, so wait
+        // against the DataTables backing store instead of only waiting for visible DOM rows.
         var deadline = DateTimeOffset.UtcNow.AddSeconds(_options.MaxWaitSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -98,6 +107,8 @@ public sealed class IConnectClient(IOptions<AppOptions> options, ILogger<IConnec
             }
             """);
 
+        // fnGetData returns all rows loaded by DataTables, not just the currently visible page.
+        // That is why the scraper can read all 39 machines even when the UI shows 25 entries.
         var machines = raw.GetProperty("rows").EnumerateArray()
             .Select(row =>
             {

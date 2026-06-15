@@ -33,16 +33,16 @@ public static partial class MachineDataFunctions
 
     public static string? ParseMoldNo(string channel2)
     {
+        // ch2 is stored as-is because users inspect the same wording shown on i-Connect,
+        // including values such as "Mold", "Mold ABS", and "Mold Mold Name".
         var value = channel2.Trim();
-        if (string.Equals(value, "Mold", StringComparison.OrdinalIgnoreCase)) return null;
-        if (value.StartsWith("Mold ", StringComparison.OrdinalIgnoreCase)) value = value[5..].Trim();
-        return string.IsNullOrWhiteSpace(value) || string.Equals(value, "Mold Name", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : value;
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     public static decimal CreateSid(DateTimeOffset timestamp, int batchIndex)
     {
+        // dbo.GetSid() was not reliable in this environment. This produces a deterministic,
+        // time-based numeric SID with a per-batch suffix so seed/API rows stay unique.
         var seconds = (long)(timestamp.LocalDateTime - new DateTime(2013, 5, 1)).TotalSeconds;
         var suffix = (timestamp.Millisecond * 1000 + batchIndex) % 1_000_000;
         return decimal.Parse($"{seconds}{suffix:000000}", CultureInfo.InvariantCulture);
@@ -55,6 +55,7 @@ public static partial class MachineDataFunctions
         bool forceAll) =>
         current.Where(machine =>
         {
+            // Startup sends a full baseline once; later cycles only retry unsent or changed statuses.
             if (forceAll) return true;
             var equipmentNo = BuildEquipmentNo(prefix, machine.MachineName);
             return !previous.TryGetValue(equipmentNo, out var condition) ||

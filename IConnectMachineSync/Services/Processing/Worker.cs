@@ -16,6 +16,8 @@ public sealed class Worker(IJob job, IOptions<AppOptions> options, ILogger<Worke
             var startedAt = DateTimeOffset.Now;
             try
             {
+                // Execute cycles serially. If a scrape/API run takes longer than the interval,
+                // the next cycle starts immediately after it finishes instead of overlapping.
                 await job.ExecuteAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

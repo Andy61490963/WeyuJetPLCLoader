@@ -8,6 +8,7 @@ public sealed class MachineSyncJob(
     IIConnectClient iConnectClient,
     IEquipmentApiClient apiClient,
     IExcelService excelService,
+    IDapperRepository repository,
     IOptions<AppOptions> options,
     ILogger<MachineSyncJob> logger) : IJob
 {
@@ -20,6 +21,11 @@ public sealed class MachineSyncJob(
         ValidateApiCredentials();
         var batch = await iConnectClient.ReadMachinesAsync(cancellationToken);
         logger.LogInformation("Read {Count} machines from i-Connect at {CapturedAt}.", batch.Machines.Count, batch.CapturedAt);
+
+        // Keep EQM_MASTER aligned with the latest i-Connect screen even when the machine status
+        // did not change enough to trigger a cloud API call.
+        var updatedMasterRows = await repository.UpdateMachineCurrentFieldsAsync(batch.Machines, _options.Sync.EquipmentPrefix, cancellationToken);
+        logger.LogInformation("Updated EQM_MASTER current fields for {UpdatedRows} machines.", updatedMasterRows);
 
         if (_options.ExcelExport.Enabled)
         {
@@ -40,7 +46,10 @@ public sealed class MachineSyncJob(
             var equipmentNo = MachineDataFunctions.BuildEquipmentNo(_options.Sync.EquipmentPrefix, machine.MachineName);
             try
             {
-                await apiClient.SendStatusAsync(machine, equipmentNo, batch.CapturedAt, cancellationToken);
+                // The API inserts EQM_STATUS_CHANGE_HIST by DATA_LINK_SID. We use that SID right
+                // after a successful call to enrich the same history row with raw i-Connect ch1-ch4 values.
+                var dataLinkSid = await apiClient.SendStatusAsync(machine, equipmentNo, batch.CapturedAt, cancellationToken);
+                await repository.UpdateHistoryCustomFieldsAsync(dataLinkSid, machine, cancellationToken);
                 _lastSuccessfulStatuses[equipmentNo] = machine.MachineCondition;
                 successCount++;
             }
@@ -51,12 +60,48 @@ public sealed class MachineSyncJob(
             }
         }
 
+        var qtySuccessCount = 0;
+        var qtyFailureCount = 0;
+        var qtySkippedCount = 0;
+        if (_options.Sync.SendQtyAutoDc)
+        {
+            foreach (var machine in batch.Machines)
+            {
+                var equipmentNo = MachineDataFunctions.BuildEquipmentNo(_options.Sync.EquipmentPrefix, machine.MachineName);
+                var quantity = MachineDataFunctions.ParseShotCount(machine.Channel3);
+                if (quantity is null)
+                {
+                    qtySkippedCount++;
+                    logger.LogWarning("Qty AutoDC upload skipped for {EquipmentNo}; ch3 could not be parsed: {Channel3}.", equipmentNo, machine.Channel3);
+                    continue;
+                }
+
+                try
+                {
+                    await apiClient.SendQuantityAsync(equipmentNo, quantity.Value, cancellationToken);
+                    qtySuccessCount++;
+                }
+                catch (Exception ex)
+                {
+                    qtyFailureCount++;
+                    logger.LogError(ex, "Qty AutoDC upload failed for {EquipmentNo}, Qty {Quantity}; it will be retried next cycle.", equipmentNo, quantity);
+                }
+            }
+        }
+        else
+        {
+            qtySkippedCount = batch.Machines.Count;
+        }
+
         _firstRun = false;
         logger.LogInformation(
-            "Machine sync cycle completed. Success: {SuccessCount}; failed: {FailureCount}; skipped unchanged: {SkippedCount}.",
+            "Machine sync cycle completed. Status success: {SuccessCount}; status failed: {FailureCount}; status skipped unchanged: {SkippedCount}; Qty success: {QtySuccessCount}; Qty failed: {QtyFailureCount}; Qty skipped: {QtySkippedCount}.",
             successCount,
             failureCount,
-            batch.Machines.Count - changed.Count);
+            batch.Machines.Count - changed.Count,
+            qtySuccessCount,
+            qtyFailureCount,
+            qtySkippedCount);
     }
 
     private void ValidateApiCredentials()

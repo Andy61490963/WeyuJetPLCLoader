@@ -16,7 +16,11 @@ public class Program
         Log.Logger = SerilogConfigurator.CreateBootstrapLogger();
         try
         {
-            var builder = Host.CreateApplicationBuilder(args);
+            var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+            {
+                Args = args,
+                ContentRootPath = AppContext.BaseDirectory
+            });
             if (args.Any(arg => string.Equals(arg, "--no-excel", StringComparison.OrdinalIgnoreCase)))
                 builder.Configuration["ExcelExport:Enabled"] = "false";
             builder.Services.AddWindowsService(options => options.ServiceName = "IConnect Machine Sync");
@@ -37,12 +41,17 @@ public class Program
             });
             builder.Services.AddSingleton<IJob, MachineSyncJob>();
 
+            // These switches are for operations and testing: seed only, scrape/export only,
+            // one full sync, or the normal long-running worker/Windows Service mode.
             var seedOnly = args.Any(arg => string.Equals(arg, "--seed-only", StringComparison.OrdinalIgnoreCase));
             var scrapeOnce = args.Any(arg => string.Equals(arg, "--scrape-once", StringComparison.OrdinalIgnoreCase));
             var runOnce = args.Any(arg => string.Equals(arg, "--run-once", StringComparison.OrdinalIgnoreCase));
             if (!seedOnly && !scrapeOnce && !runOnce) builder.Services.AddHostedService<Worker>();
 
             using var host = builder.Build();
+            // Keep the customer extension columns idempotently available before any mode runs.
+            await host.Services.GetRequiredService<IDapperRepository>()
+                .EnsureCustomColumnsAsync(CancellationToken.None);
             if (seedOnly)
             {
                 await SeedMachinesAsync(host.Services);
@@ -116,8 +125,18 @@ public class Program
 
         var excel = services.GetRequiredService<IExcelService>();
         var repository = services.GetRequiredService<IDapperRepository>();
-        var machines = excel.ReadMachines(options.MachineSeed.SourceExcelPath);
+        var sourcePath = ResolveDeploymentPath(options.MachineSeed.SourceExcelPath);
+        if (!File.Exists(sourcePath))
+        {
+            logger.LogWarning("Machine seed source file does not exist; skipping seed: {SourcePath}.", sourcePath);
+            return;
+        }
+
+        var machines = excel.ReadMachines(sourcePath);
         var inserted = await repository.SeedMachinesAsync(machines, options.Sync.EquipmentPrefix, CancellationToken.None);
         logger.LogInformation("Machine seed completed. Source rows: {Rows}; inserted: {Inserted}.", machines.Count, inserted);
     }
+
+    private static string ResolveDeploymentPath(string path) =>
+        Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, path));
 }
